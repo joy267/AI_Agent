@@ -1,27 +1,27 @@
-console.log("Hey Buddy, Agent J is here 😎");
+console.log("Hey Buddy, Mr. CA is here 😎");
 
-import OpenAI from "openai";
-import readline from 'node:readline/promises'
+import OpenAI from "openai";  // Importing OpenAI
+import readline from 'node:readline/promises'  // Importing readline to get inputs from terminal
 
-let expenceDB = []
-let incomeDB = []
+let expenceDB = []  // Empty array to store expences
+let incomeDB = []  // Empty array to store income
 
-const client = new OpenAI({
+const client = new OpenAI({  // Creating OpenAI client
     apiKey: process.env.GROQ_API_KEY,
     baseURL: "https://api.groq.com/openai/v1",
 });
 
-// let user_message = "I bought a macbook pro for 150000"
+async function calling_agent() {  // Calling agent function
 
-async function calling_agent() {
-    const r1 = readline.createInterface({
+    const r1 = readline.createInterface({   // Creating readline interface to take inputs from users
         input: process.stdin,
         output: process.stdout
     })
 
-    const agent_messages = [{
+    const agent_messages = [{  // Agent default messages
+
         role: 'system',
-        content: `Your name is Agent J. You are a helpful assistant. You are here to help the user with their tasks. You are a AI agent that can perform tasks for the user.
+        content: `Your name is Mr. CA. You are a financial assistant. You are here to help the user with financial tasks. You are a AI agent that can perform tasks for the user.
 
         You have access to the following tools:
         1. getMonthlyExpences({from, to}): string // Get monthly expences from the database
@@ -41,21 +41,23 @@ async function calling_agent() {
             break
         }
 
-        agent_messages.push({
+        agent_messages.push({  // Pushing user question to agent messages
             role: 'user',
             content: userQuestion
         })
 
         // This is for Agent calling
         while (true) {
-            const response = await client.chat.completions.create({
+
+            const response = await client.chat.completions.create({  // Creating response from OpenAI
                 model: "openai/gpt-oss-20b",
                 messages: agent_messages,
-                tools: [
+
+                tools: [  // Giving tools or DB access to the agent
                     {
                         type: "function",
                         function: {
-                            name: "getMonthlyExpences",
+                            name: "getMonthlyExpences",  // Giving getMonthlyExpences function or DB access to the agent
                             description: 'Get monthly expences from the database',
                             parameters: {
                                 type: 'object',
@@ -76,7 +78,7 @@ async function calling_agent() {
                     {
                         type: "function",
                         function: {
-                            name: "addExpences",
+                            name: "addExpences",  // Giving addExpences function or DB access to the agent
                             description: 'Add expences to the database',
                             parameters: {
                                 type: 'object',
@@ -101,7 +103,7 @@ async function calling_agent() {
                     {
                         type: "function",
                         function: {
-                            name: "addIncome",
+                            name: "addIncome",  // Giving addIncome function or DB access to the agent
                             description: 'Add income to the database',
                             parameters: {
                                 type: 'object',
@@ -126,39 +128,39 @@ async function calling_agent() {
                     {
                         type: "function",
                         function: {
-                            name: "getBalance",
+                            name: "getBalance",  // Giving getBalance function or DB access to the agent
                             description: 'Get balance from the database',
                         }
                     }
                 ]
             })
 
-            agent_messages.push(response.choices[0].message)
+            agent_messages.push(response.choices[0].message) // Pushing agent response to agent messages
 
-            const toolCalls = response.choices[0].message.tool_calls
+            const toolCalls = response.choices[0].message.tool_calls // Getting tool calls from agent response
 
-            if (!toolCalls) {
-                console.log(`Agent J: ${response.choices[0].message.content}`)
+            if (!toolCalls) {  // If there are no tool calls
+                console.log(`Mr. CA: ${response.choices[0].message.content}`)
                 break
             }
 
-            for (const tool of toolCalls) {
+            for (const tool of toolCalls) {  // If there are tool calls
                 const functionName = tool.function.name
                 const functionArgs = JSON.parse(tool.function.arguments)
 
                 let result = ""
 
-                if (functionName === 'getMonthlyExpences') {
+                if (functionName === 'getMonthlyExpences') {  // If the function name is getMonthlyExpences
                     result = await getMonthlyExpences(functionArgs)
-                } else if (functionName === 'addExpences') {
+                } else if (functionName === 'addExpences') {  // If the function name is addExpences
                     result = await addExpences(functionArgs)
-                } else if (functionName === 'addIncome') {
+                } else if (functionName === 'addIncome') {  // If the function name is addIncome
                     result = await addIncome(functionArgs)
-                } else if (functionName === 'getBalance') {
+                } else if (functionName === 'getBalance') {  // If the function name is getBalance
                     result = await getBalance()
                 }
 
-                agent_messages.push({
+                agent_messages.push({  // Pushing tool response to agent messages
                     role: 'tool',
                     content: result,
                     tool_call_id: tool.id
@@ -167,12 +169,12 @@ async function calling_agent() {
         }
     }
 
-    r1.close()
+    r1.close() // Closing the readline interface
 }
 
 calling_agent()
 
-async function getMonthlyExpences({ from, to }) {
+async function getMonthlyExpences({ from, to }) {  // Getting monthly expences from the database
 
     // TODO: Get monthly expences from the database ...
     const expences = expenceDB.filter(expence => expence.date >= from && expence.date <= to)
@@ -182,21 +184,21 @@ async function getMonthlyExpences({ from, to }) {
     return `₹ ${total_expences}`
 }
 
-async function addExpences({ name, amount, date }) {
+async function addExpences({ name, amount, date }) {  // Adding expence to the database
 
     // TODO: Add expence to the database ...
     expenceDB.push({ name, amount, date })
     return `Expence ${name} added successfully`
 }
 
-async function addIncome({ name, amount, date }) {
+async function addIncome({ name, amount, date }) {  // Adding income to the database
 
     // TODO: Add income to the database ...
     incomeDB.push({ name, amount, date })
     return `Income ${name} added successfully`
 }
 
-async function getBalance() {
+async function getBalance() {  // Getting balance from the database
     const totalIncome = incomeDB.reduce((total, income_amount) => total + income_amount.amount, 0)
     const totalExpences = expenceDB.reduce((total, expence_amount) => total + expence_amount.amount, 0)
 
