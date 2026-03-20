@@ -127,7 +127,7 @@ async function getWeatherDB(location: string) {
         }
 
         // Get current + next 4 hours (total 5 forecasts)
-        const forecasts = timelines.slice(0, 10).map((item: any) => ({
+        const forecasts = timelines.slice(0, 5).map((item: any) => ({
             time: item.time,
             temperature: item.values.temperature,
             temperatureApparent: item.values.temperatureApparent,

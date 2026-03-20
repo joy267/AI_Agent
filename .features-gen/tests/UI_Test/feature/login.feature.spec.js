@@ -1,0 +1,74 @@
+// Generated from: tests\UI_Test\feature\login.feature
+import { test } from "playwright-bdd";
+
+test.describe('Verify login', () => {
+
+  test.beforeEach('Background', async ({ Given, And, page }, testInfo) => { if (testInfo.error) return;
+    await Given('I navigate to "https://ecommerce-playground.lambdatest.io/"', null, { page }); 
+    await And('I click on My account', null, { page }); 
+  });
+  
+  test('Verify user is able to login with valid credentials', { tag: ['@login'] }, async ({ When, Then, And, page }) => { 
+    await When('I enter E-Mail Address "redoyig302@faxzu.com"', null, { page }); 
+    await And('I enter password "test@1234"', null, { page }); 
+    await And('I click on submit button', null, { page }); 
+    await Then('I should verify url contains "route=account/account"', null, { page }); 
+  });
+
+  test.describe('Verify user is not able to login with following credentials', () => {
+
+    test('Example #1', { tag: ['@login'] }, async ({ When, Then, And, page }) => { 
+      await When('I enter E-Mail Address "invalid@email.com"', null, { page }); 
+      await And('I enter password "test123"', null, { page }); 
+      await And('I click on submit button', null, { page }); 
+      await Then('I should see login error message "Warning: No match for E-Mail Address and/or Password."', null, { page }); 
+    });
+
+    test('Example #2', { tag: ['@login'] }, async ({ When, Then, And, page }) => { 
+      await When('I enter E-Mail Address ""', null, { page }); 
+      await And('I enter password "test123"', null, { page }); 
+      await And('I click on submit button', null, { page }); 
+      await Then('I should see login error message "Warning: No match for E-Mail Address and/or Password."', null, { page }); 
+    });
+
+    test('Example #3', { tag: ['@login'] }, async ({ When, Then, And, page }) => { 
+      await When('I enter E-Mail Address "invalid@email.com"', null, { page }); 
+      await And('I enter password ""', null, { page }); 
+      await And('I click on submit button', null, { page }); 
+      await Then('I should see login error message "Warning: No match for E-Mail Address and/or Password."', null, { page }); 
+    });
+
+    test('Example #4', { tag: ['@login'] }, async ({ When, Then, And, page }) => { 
+      await When('I enter E-Mail Address ""', null, { page }); 
+      await And('I enter password ""', null, { page }); 
+      await And('I click on submit button', null, { page }); 
+      await Then('I should see login error message "Warning: No match for E-Mail Address and/or Password."', null, { page }); 
+    });
+
+    test('Example #5', { tag: ['@login'] }, async ({ When, Then, And, page }) => { 
+      await When('I enter E-Mail Address "redoyig302@faxzu.com"', null, { page }); 
+      await And('I enter password "wrongpass"', null, { page }); 
+      await And('I click on submit button', null, { page }); 
+      await Then('I should see login error message "Warning: No match for E-Mail Address and/or Password."', null, { page }); 
+    });
+
+  });
+
+});
+
+// == technical section ==
+
+test.use({
+  $test: [({}, use) => use(test), { scope: 'test', box: true }],
+  $uri: [({}, use) => use('tests\\UI_Test\\feature\\login.feature'), { scope: 'test', box: true }],
+  $bddFileData: [({}, use) => use(bddFileData), { scope: "test", box: true }],
+});
+
+const bddFileData = [ // bdd-data-start
+  {"pwTestLine":11,"pickleLine":10,"tags":["@login"],"steps":[{"pwStepLine":7,"gherkinStepLine":7,"keywordType":"Context","textWithKeyword":"Given I navigate to \"https://ecommerce-playground.lambdatest.io/\"","isBg":true,"stepMatchArguments":[{"group":{"start":14,"value":"\"https://ecommerce-playground.lambdatest.io/\"","children":[{"start":15,"value":"https://ecommerce-playground.lambdatest.io/","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":8,"gherkinStepLine":8,"keywordType":"Context","textWithKeyword":"And I click on My account","isBg":true,"stepMatchArguments":[]},{"pwStepLine":12,"gherkinStepLine":11,"keywordType":"Action","textWithKeyword":"When I enter E-Mail Address \"redoyig302@faxzu.com\"","stepMatchArguments":[{"group":{"start":23,"value":"\"redoyig302@faxzu.com\"","children":[{"start":24,"value":"redoyig302@faxzu.com","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":13,"gherkinStepLine":12,"keywordType":"Action","textWithKeyword":"And I enter password \"test@1234\"","stepMatchArguments":[{"group":{"start":17,"value":"\"test@1234\"","children":[{"start":18,"value":"test@1234","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":14,"gherkinStepLine":13,"keywordType":"Action","textWithKeyword":"And I click on submit button","stepMatchArguments":[]},{"pwStepLine":15,"gherkinStepLine":14,"keywordType":"Outcome","textWithKeyword":"Then I should verify url contains \"route=account/account\"","stepMatchArguments":[{"group":{"start":29,"value":"\"route=account/account\"","children":[{"start":30,"value":"route=account/account","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]}]},
+  {"pwTestLine":20,"pickleLine":24,"tags":["@login"],"steps":[{"pwStepLine":7,"gherkinStepLine":7,"keywordType":"Context","textWithKeyword":"Given I navigate to \"https://ecommerce-playground.lambdatest.io/\"","isBg":true,"stepMatchArguments":[{"group":{"start":14,"value":"\"https://ecommerce-playground.lambdatest.io/\"","children":[{"start":15,"value":"https://ecommerce-playground.lambdatest.io/","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":8,"gherkinStepLine":8,"keywordType":"Context","textWithKeyword":"And I click on My account","isBg":true,"stepMatchArguments":[]},{"pwStepLine":21,"gherkinStepLine":17,"keywordType":"Action","textWithKeyword":"When I enter E-Mail Address \"invalid@email.com\"","stepMatchArguments":[{"group":{"start":23,"value":"\"invalid@email.com\"","children":[{"start":24,"value":"invalid@email.com","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":22,"gherkinStepLine":18,"keywordType":"Action","textWithKeyword":"And I enter password \"test123\"","stepMatchArguments":[{"group":{"start":17,"value":"\"test123\"","children":[{"start":18,"value":"test123","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":23,"gherkinStepLine":19,"keywordType":"Action","textWithKeyword":"And I click on submit button","stepMatchArguments":[]},{"pwStepLine":24,"gherkinStepLine":20,"keywordType":"Outcome","textWithKeyword":"Then I should see login error message \"Warning: No match for E-Mail Address and/or Password.\"","stepMatchArguments":[{"group":{"start":33,"value":"\"Warning: No match for E-Mail Address and/or Password.\"","children":[{"start":34,"value":"Warning: No match for E-Mail Address and/or Password.","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]}]},
+  {"pwTestLine":27,"pickleLine":25,"tags":["@login"],"steps":[{"pwStepLine":7,"gherkinStepLine":7,"keywordType":"Context","textWithKeyword":"Given I navigate to \"https://ecommerce-playground.lambdatest.io/\"","isBg":true,"stepMatchArguments":[{"group":{"start":14,"value":"\"https://ecommerce-playground.lambdatest.io/\"","children":[{"start":15,"value":"https://ecommerce-playground.lambdatest.io/","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":8,"gherkinStepLine":8,"keywordType":"Context","textWithKeyword":"And I click on My account","isBg":true,"stepMatchArguments":[]},{"pwStepLine":28,"gherkinStepLine":17,"keywordType":"Action","textWithKeyword":"When I enter E-Mail Address \"\"","stepMatchArguments":[{"group":{"start":23,"value":"\"\"","children":[{"start":24,"value":"","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":29,"gherkinStepLine":18,"keywordType":"Action","textWithKeyword":"And I enter password \"test123\"","stepMatchArguments":[{"group":{"start":17,"value":"\"test123\"","children":[{"start":18,"value":"test123","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":30,"gherkinStepLine":19,"keywordType":"Action","textWithKeyword":"And I click on submit button","stepMatchArguments":[]},{"pwStepLine":31,"gherkinStepLine":20,"keywordType":"Outcome","textWithKeyword":"Then I should see login error message \"Warning: No match for E-Mail Address and/or Password.\"","stepMatchArguments":[{"group":{"start":33,"value":"\"Warning: No match for E-Mail Address and/or Password.\"","children":[{"start":34,"value":"Warning: No match for E-Mail Address and/or Password.","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]}]},
+  {"pwTestLine":34,"pickleLine":26,"tags":["@login"],"steps":[{"pwStepLine":7,"gherkinStepLine":7,"keywordType":"Context","textWithKeyword":"Given I navigate to \"https://ecommerce-playground.lambdatest.io/\"","isBg":true,"stepMatchArguments":[{"group":{"start":14,"value":"\"https://ecommerce-playground.lambdatest.io/\"","children":[{"start":15,"value":"https://ecommerce-playground.lambdatest.io/","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":8,"gherkinStepLine":8,"keywordType":"Context","textWithKeyword":"And I click on My account","isBg":true,"stepMatchArguments":[]},{"pwStepLine":35,"gherkinStepLine":17,"keywordType":"Action","textWithKeyword":"When I enter E-Mail Address \"invalid@email.com\"","stepMatchArguments":[{"group":{"start":23,"value":"\"invalid@email.com\"","children":[{"start":24,"value":"invalid@email.com","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":36,"gherkinStepLine":18,"keywordType":"Action","textWithKeyword":"And I enter password \"\"","stepMatchArguments":[{"group":{"start":17,"value":"\"\"","children":[{"start":18,"value":"","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":37,"gherkinStepLine":19,"keywordType":"Action","textWithKeyword":"And I click on submit button","stepMatchArguments":[]},{"pwStepLine":38,"gherkinStepLine":20,"keywordType":"Outcome","textWithKeyword":"Then I should see login error message \"Warning: No match for E-Mail Address and/or Password.\"","stepMatchArguments":[{"group":{"start":33,"value":"\"Warning: No match for E-Mail Address and/or Password.\"","children":[{"start":34,"value":"Warning: No match for E-Mail Address and/or Password.","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]}]},
+  {"pwTestLine":41,"pickleLine":27,"tags":["@login"],"steps":[{"pwStepLine":7,"gherkinStepLine":7,"keywordType":"Context","textWithKeyword":"Given I navigate to \"https://ecommerce-playground.lambdatest.io/\"","isBg":true,"stepMatchArguments":[{"group":{"start":14,"value":"\"https://ecommerce-playground.lambdatest.io/\"","children":[{"start":15,"value":"https://ecommerce-playground.lambdatest.io/","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":8,"gherkinStepLine":8,"keywordType":"Context","textWithKeyword":"And I click on My account","isBg":true,"stepMatchArguments":[]},{"pwStepLine":42,"gherkinStepLine":17,"keywordType":"Action","textWithKeyword":"When I enter E-Mail Address \"\"","stepMatchArguments":[{"group":{"start":23,"value":"\"\"","children":[{"start":24,"value":"","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":43,"gherkinStepLine":18,"keywordType":"Action","textWithKeyword":"And I enter password \"\"","stepMatchArguments":[{"group":{"start":17,"value":"\"\"","children":[{"start":18,"value":"","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":44,"gherkinStepLine":19,"keywordType":"Action","textWithKeyword":"And I click on submit button","stepMatchArguments":[]},{"pwStepLine":45,"gherkinStepLine":20,"keywordType":"Outcome","textWithKeyword":"Then I should see login error message \"Warning: No match for E-Mail Address and/or Password.\"","stepMatchArguments":[{"group":{"start":33,"value":"\"Warning: No match for E-Mail Address and/or Password.\"","children":[{"start":34,"value":"Warning: No match for E-Mail Address and/or Password.","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]}]},
+  {"pwTestLine":48,"pickleLine":28,"tags":["@login"],"steps":[{"pwStepLine":7,"gherkinStepLine":7,"keywordType":"Context","textWithKeyword":"Given I navigate to \"https://ecommerce-playground.lambdatest.io/\"","isBg":true,"stepMatchArguments":[{"group":{"start":14,"value":"\"https://ecommerce-playground.lambdatest.io/\"","children":[{"start":15,"value":"https://ecommerce-playground.lambdatest.io/","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":8,"gherkinStepLine":8,"keywordType":"Context","textWithKeyword":"And I click on My account","isBg":true,"stepMatchArguments":[]},{"pwStepLine":49,"gherkinStepLine":17,"keywordType":"Action","textWithKeyword":"When I enter E-Mail Address \"redoyig302@faxzu.com\"","stepMatchArguments":[{"group":{"start":23,"value":"\"redoyig302@faxzu.com\"","children":[{"start":24,"value":"redoyig302@faxzu.com","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":50,"gherkinStepLine":18,"keywordType":"Action","textWithKeyword":"And I enter password \"wrongpass\"","stepMatchArguments":[{"group":{"start":17,"value":"\"wrongpass\"","children":[{"start":18,"value":"wrongpass","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]},{"pwStepLine":51,"gherkinStepLine":19,"keywordType":"Action","textWithKeyword":"And I click on submit button","stepMatchArguments":[]},{"pwStepLine":52,"gherkinStepLine":20,"keywordType":"Outcome","textWithKeyword":"Then I should see login error message \"Warning: No match for E-Mail Address and/or Password.\"","stepMatchArguments":[{"group":{"start":33,"value":"\"Warning: No match for E-Mail Address and/or Password.\"","children":[{"start":34,"value":"Warning: No match for E-Mail Address and/or Password.","children":[{"children":[]}]},{"children":[{"children":[]}]}]},"parameterTypeName":"string"}]}]},
+]; // bdd-data-end

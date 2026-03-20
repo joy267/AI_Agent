@@ -1,0 +1,35 @@
+{
+  "cookies": [
+    {
+      "name": "_ga",
+      "value": "GA1.1.1426797913.1774014801",
+      "domain": ".etloptival.com",
+      "path": "/",
+      "expires": 1808574801.107879,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga_LFLKC8B32L",
+      "value": "GS2.1.s1774014801$o1$g0$t1774014801$j60$l0$h0",
+      "domain": ".etloptival.com",
+      "path": "/",
+      "expires": 1808574801.148153,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "refresh_token",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc3NDYxOTU5OSwiaWF0IjoxNzc0MDE0Nzk5LCJqdGkiOiI2NWQ2MjVlMDgwYmM0ZTJiODNjYWEwODlhNzM0MmE0NSIsInVzZXJfaWQiOjEzMn0.lLRU3nIY-QluDHbWqeSajJGlkESpV_swbYvcupsYvhQ",
+      "domain": "growth-notifier-stage.etloptival.com",
+      "path": "/",
+      "expires": 1774619602.917697,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    }
+  ],
+  "origins": []
+}

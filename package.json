@@ -9,13 +9,20 @@
     "start": "NODE_ENV=production bun src/index.ts"
   },
   "dependencies": {
+    "dotenv": "^17.3.1",
     "openai": "^6.16.0",
+    "prompt-sync": "^4.2.0",
     "react": "^19",
     "react-dom": "^19"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/bun": "latest",
+    "@types/node": "^25.3.5",
+    "@types/prompt-sync": "^4.2.3",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/bun": "latest"
+    "@types/winston": "^2.4.4",
+    "playwright-bdd": "^8.4.2"
   }
 }
