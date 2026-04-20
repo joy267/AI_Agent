@@ -204,3 +204,5 @@ async function getBalance() {  // Getting balance from the database
 
     return `₹ ${totalIncome - totalExpences}`
 }
+
+// Run command - bun run financeAgent.js

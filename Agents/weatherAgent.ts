@@ -151,3 +151,5 @@ async function getWeatherDB(location: string) {
         return error.message
     }
 }
+
+// Run command - bun run weatherAgent.ts
