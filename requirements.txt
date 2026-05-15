@@ -9,6 +9,12 @@ qrcode
 tavily-python>=0.7.12
 textstat
 vertexai
+python-dotenv>=1.0.0
+langgraph>=0.1.19
+langchain>=0.1.20
+langchain-core>=0.1.52
+langchain-groq>=0.1.9
+anthropic>=0.20.0
 
 # === Web Framework + API ===
 fastapi
