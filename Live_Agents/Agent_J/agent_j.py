@@ -4,18 +4,26 @@ from datetime import datetime
 import os
 import json
 import re
+import time
 import logging
 from langchain_core.messages import SystemMessage
 from langchain_core.messages import BaseMessage
 from langchain_core.messages import AIMessage
 from langchain_core.messages import ToolMessage
 from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
 from langgraph.graph.message import add_messages
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import RetryPolicy
 import requests
+import openai
 from groq import BadRequestError, RateLimitError
+from google import genai
+from google.genai import types
+from google.genai import errors as genai_errors
 
 load_dotenv()
 
@@ -48,7 +56,12 @@ def model_call(state: AgentState) -> AgentState:
         f"matched to a similarly named city such as Indianapolis. "
         f"When the user asks you to write, create, or draft a blog post or "
         f"article about available jobs, use the write_job_blog tool — pass a "
-        f"query to feature several jobs, or a job_id to feature one specific job."
+        f"query to feature several jobs, or a job_id to feature one specific job. "
+        f"If the user asks about, or asks you to write a blog for, a specific "
+        f"job you already showed earlier in this conversation, reuse that job's "
+        f"Job ID from the earlier results (pass it as job_id) instead of "
+        f"searching again by title — searching by title may return a different "
+        f"posting."
     ))
     response = llm_model.invoke([system_prompt] + state["messages"])
     return {"messages": [response]}
@@ -372,6 +385,66 @@ def get_company_salary(
     return "\n\n".join(_format_salary(est) for est in estimates)
 
 
+# ─── Gemini (Google AI Studio) — used only to WRITE blog prose ──────────────
+# The blog text is written by Gemini, while the job FACTS still come from the
+# JSearch API (so the post can't invent salaries, links, or requirements). Model
+# / timeout / retry policy are env-configurable. The Groq `summarizer` defined
+# later is unrelated and stays for the tool-call salvage path.
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_TIMEOUT_MS = int(os.getenv("GEMINI_TIMEOUT_MS", "60000"))
+GEMINI_MAX_ATTEMPTS = int(os.getenv("GEMINI_MAX_ATTEMPTS", "3"))
+
+
+def _gemini_generate(system_text: str, user_text: str):
+    """Call Gemini once to turn a grounded prompt into prose.
+    Returns (text, error): on success error is None; on failure text is None and
+    error is a short human-readable string. Retries transient 5xx / 429 errors
+    with exponential backoff; a bad key (401/403) and other 4xx fail fast."""
+    api_key = os.getenv("GOOGLE_AI_STUDIO_API_KEY")
+    if not api_key:
+        return None, "GOOGLE_AI_STUDIO_API_KEY is not set"
+
+    client = genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_MS),
+    )
+
+    last_error = None
+    for attempt in range(1, GEMINI_MAX_ATTEMPTS + 1):
+        try:
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=user_text,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_text,
+                    temperature=0.7,
+                    max_output_tokens=4096,
+                ),
+            )
+            text = (response.text or "").strip()
+            if text:
+                return text, None
+            last_error = "Gemini returned no content (possibly filtered)"
+        except genai_errors.ClientError as e:
+            code = getattr(e, "code", None)
+            if code in (401, 403):
+                return None, "the Google API key was rejected (check GOOGLE_AI_STUDIO_API_KEY)"
+            last_error = e
+            if code != 429:  # non-retryable client error
+                return None, f"Gemini request failed: {e}"
+        except genai_errors.ServerError as e:
+            last_error = e  # retryable
+        except Exception as e:
+            return None, f"unexpected Gemini error: {e}"
+
+        if attempt < GEMINI_MAX_ATTEMPTS:
+            wait = 1.5 * (2 ** (attempt - 1))
+            logger.debug("Gemini transient error, retrying in %.1fs: %s", wait, last_error)
+            time.sleep(wait)
+
+    return None, f"Gemini failed after {GEMINI_MAX_ATTEMPTS} attempts: {last_error}"
+
+
 @tool
 def write_job_blog(
     query: str = "",
@@ -382,8 +455,9 @@ def write_job_blog(
     max_results: int = 10,
 ) -> str:
     """Write a professional, ready-to-publish blog post for a job-hunting
-    website. Use this when the user asks to write, create, or draft a blog,
-    article, or post about jobs (rather than just list them).
+    website, using Google Gemini to do the writing. Use this when the user asks
+    to write, create, or draft a blog, article, or post about jobs (rather than
+    just list them).
 
     Provide EITHER:
       - query: to feature multiple matching openings, e.g. "python developer
@@ -463,34 +537,49 @@ def write_job_blog(
 
     job_data = ("\n\n" + ("-" * 20) + "\n\n").join(blocks)
 
-    prompt = [
-        SystemMessage(content=(
-            "You are a professional content writer for a job-hunting website. "
-            "Write an engaging, well-structured blog post in Markdown that "
-            "showcases the job opening(s) provided. If several jobs are given, "
-            "use a catchy H1 title, a short inviting intro, then one H3 "
-            "subsection per job headed by the role and company, each with a 1-2 "
-            "sentence description, a short bullet list of key facts (location, "
-            "work arrangement, type, key skills), and the exact apply link as a "
-            "Markdown link, ending with a brief call-to-action. If only ONE job "
-            "is given, instead write a focused single-role feature article: an "
-            "H1 title, an engaging intro, sections for the role overview, "
-            "responsibilities, and requirements, and a clear apply call-to-"
-            "action with the exact link. Use ONLY the data provided — do not "
-            "invent salaries, requirements, dates, or links. Reproduce every "
-            "apply link exactly as given."
-        )),
-        (
-            "user",
-            f"Blog topic: {topic}\nNumber of openings: {len(jobs)}\n\n"
-            f"Job data:\n{job_data}",
-        ),
-    ]
+    system_text = (
+        "You are an expert SEO content writer for a job-hunting website. "
+        "Write an engaging, original, ready-to-publish blog post in Markdown "
+        "using ONLY the job data provided below. "
+        "Tone: professional yet conversational, active voice, short 2-4 "
+        "sentence paragraphs, key facts in bold, Grade 7-9 reading level. "
+        "Do NOT invent or assume anything not in the data — no made-up "
+        "salaries, skills, qualifications, benefits, company culture, dates, or "
+        "links. If a detail is missing, write around it gracefully rather than "
+        "filling the gap. Reproduce every apply link exactly as given.\n\n"
+        "If only ONE job is given, write a single-role feature article with "
+        "this exact section order:\n"
+        "1. An H1 title shaped like '<Role> at <Company>: <short benefit-led "
+        "hook>'.\n"
+        "2. A two-paragraph intro that hooks the reader, says why the role "
+        "matters, and states the location, work arrangement, and employment "
+        "type.\n"
+        "3. ## Role Overview — what the role is and who it suits.\n"
+        "4. ## Key Responsibilities — a bullet list (only responsibilities "
+        "present in the data).\n"
+        "5. ## Required Skills & Qualifications — a bullet list (only skills "
+        "and qualifications present in the data).\n"
+        "6. ## Why Join <Company>? — base this strictly on the provided "
+        "benefits/description; if none are given, keep it general and honest "
+        "instead of inventing perks, culture, or projects.\n"
+        "7. ## Call to Action — a short closing that ends with the exact apply "
+        "link.\n"
+        "Target length: 600-900 words.\n\n"
+        "If SEVERAL jobs are given, write a roundup instead: a catchy H1, a "
+        "short inviting intro, then one H3 subsection per job headed by the "
+        "role and company, each with a 1-2 sentence description, a short bullet "
+        "list of key facts (location, work arrangement, type, key skills), and "
+        "the exact apply link as a Markdown link, ending with a brief "
+        "call-to-action."
+    )
+    user_text = (
+        f"Blog topic: {topic}\nNumber of openings: {len(jobs)}\n\n"
+        f"Job data:\n{job_data}"
+    )
 
-    try:
-        blog = summarizer.invoke(prompt).content
-    except Exception as e:
-        return f"Failed to write the blog: {e}"
+    blog, gen_error = _gemini_generate(system_text, user_text)
+    if blog is None:
+        return f"Failed to write the blog: {gen_error}"
 
     note = f"\n\n_(Note: the job list was partial due to: {error})_" if error else ""
     return blog + note
@@ -676,21 +765,28 @@ DISPLAY_TOOL_OUTPUT = {
     "write_job_blog",
 }
 
-# NOTE: temperature is deliberately non-zero. At temperature=0 the model is
-# deterministic, so if it mangles a tool call once it will mangle it identically
-# on every retry — making the retry useless. A bit of sampling variation lets a
-# fresh attempt roll clean syntax.
-llm_model = ChatGroq(
-    model="llama-3.3-70b-versatile",
+# Tool-routing model: poolside/laguna-m.1:free, served via OpenRouter's
+# OpenAI-compatible endpoint. We point LangChain's ChatOpenAI at OpenRouter's
+# base URL so .bind_tools() and the existing LangGraph flow keep working
+# unchanged. `extra_body` carries OpenRouter-specific params straight through to
+# the request body — here we turn on reasoning so the model thinks step-by-step
+# before routing to a tool. A modest non-zero temperature keeps tool-call
+# syntax from getting stuck in a single bad pattern.
+llm_model = ChatOpenAI(
+    model="poolside/laguna-m.1:free",
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY"),
     temperature=0.5,
-    groq_api_key=os.getenv("GROQ_API_KEY"),
+    extra_body={"reasoning": {"enabled": True}},
+    # Optional: surface your app on the OpenRouter leaderboards.
+    # default_headers={"HTTP-Referer": "https://your-site", "X-Title": "Agent_J"},
 ).bind_tools(tools)
 
 # A plain model with NO tools bound — it can only write text, never call a tool,
-# so it can't trigger another tool_use_failed glitch. Used to write job blogs
-# and to turn a salvaged raw tool result into a clean answer for the user.
-# Runs on the smaller 8B model: writing/summarizing doesn't need the 70B, and
-# keeping it off 70B preserves that model's daily token budget for tool routing.
+# so it can't trigger another tool_use_failed glitch. Used to turn a salvaged
+# raw tool result into a clean answer for the user. Runs on the smaller 8B
+# model: summarizing doesn't need the 70B, and keeping it off 70B preserves
+# that model's daily token budget for tool routing.
 summarizer = ChatGroq(
     model="llama-3.1-8b-instant",
     temperature=0.3,
@@ -719,9 +815,58 @@ def after_tools(state: AgentState) -> str:
             break
     return "continue"
 
+
+# ─── Provider-error handling for the OpenRouter model ───────────────────────
+# OpenRouter sometimes returns a transient upstream error (e.g. a 502 "Provider
+# returned error" on a free model). langchain_openai surfaces that as a plain
+# ValueError({'message': ..., 'code': ...}); the openai SDK raises APIError
+# subclasses carrying a status_code. We retry the transient ones at the node
+# level (see RetryPolicy below) and report the rest cleanly instead of crashing.
+
+def _provider_error_text(exc) -> str | None:
+    """If exc looks like an OpenRouter/OpenAI provider error, return a short
+    human-readable description; otherwise None (so real bugs aren't swallowed)."""
+    if isinstance(exc, ValueError) and exc.args and isinstance(exc.args[0], dict):
+        info = exc.args[0]
+        code = info.get("code")
+        msg = info.get("message", "provider error")
+        return msg + (f" (code {code})" if code is not None else "")
+    if isinstance(exc, openai.APIError):
+        code = getattr(exc, "status_code", None)
+        return exc.__class__.__name__ + (f" (HTTP {code})" if code else "")
+    return None
+
+
+def _is_transient_provider_error(exc) -> bool:
+    """For the node RetryPolicy: retry only transient failures — provider/HTTP
+    5xx and 429, plus connection/timeout blips — which usually clear on retry."""
+    if isinstance(exc, ValueError) and exc.args and isinstance(exc.args[0], dict):
+        code = exc.args[0].get("code")
+        return code == 429 or (isinstance(code, int) and 500 <= code <= 599)
+    if isinstance(exc, (openai.APIConnectionError, openai.APITimeoutError,
+                        openai.InternalServerError, openai.RateLimitError)):
+        return True
+    if isinstance(exc, openai.APIStatusError):
+        code = getattr(exc, "status_code", None)
+        return code == 429 or (isinstance(code, int) and 500 <= code <= 599)
+    return False
+
+
 graph = StateGraph(AgentState)
 
-graph.add_node("Agent_J", model_call)
+# Retry transient provider errors (502/429/connection) inside the node, with
+# backoff. Doing it here — rather than re-running app.stream from the outside —
+# means the retry does NOT re-append the user's message to the saved thread.
+graph.add_node(
+    "Agent_J",
+    model_call,
+    retry_policy=RetryPolicy(
+        max_attempts=4,
+        initial_interval=1.0,
+        backoff_factor=2.0,
+        retry_on=_is_transient_provider_error,
+    ),
+)
 
 tool_node = ToolNode(tools=tools)
 graph.add_node("tools", tool_node)
@@ -746,16 +891,27 @@ graph.add_conditional_edges(
     },
 )
 
-app = graph.compile()
+# Compile with an in-memory checkpointer so the conversation persists across
+# turns: each new question is APPENDED to the same thread (see add_messages),
+# letting the model see what it already told the user — e.g. a job_id it showed
+# earlier — instead of starting blank every time. Memory lasts for the life of
+# the process; restart the program (or use a new thread_id) to clear it.
+checkpointer = MemorySaver()
+app = graph.compile(checkpointer=checkpointer)
+
+# A checkpointer needs a thread_id to know which conversation to load/append to.
+# One id = one running session here; swap it to isolate separate chats.
+SESSION_CONFIG = {"configurable": {"thread_id": "agent_j_session"}}
 
 def print_stream(stream):
     for s in stream:
         message = s["messages"][-1]
         if isinstance(message, ToolMessage) and message.name in DISPLAY_TOOL_OUTPUT:
-            # The full job list / details, shown verbatim to the user.
-            print("\n" + str(message.content), flush=True)
+            # The full job list / details / blog, shown verbatim to the user.
+            # Label it with the agent's name so it's clear Agent_J is replying.
+            print("\nAgent_J:\n\n" + str(message.content).lstrip("\n"), flush=True)
         elif isinstance(message, AIMessage) and not message.tool_calls and message.content:
-            print("\nAgent_J:", message.content, flush=True)
+            print("\nAgent_J:\n\n" + str(message.content).lstrip("\n"), flush=True)
 
 
 def salvage_failed_tool_call(error: BadRequestError) -> str | None:
@@ -797,7 +953,31 @@ def run_with_retry(inputs, max_attempts=4):
     last_error = None
     for attempt in range(1, max_attempts + 1):
         try:
-            print_stream(app.stream(inputs, stream_mode="values"))
+            print_stream(app.stream(inputs, SESSION_CONFIG, stream_mode="values"))
+            return
+        except ValueError as e:
+            # OpenRouter provider error surfaced by langchain_openai. Transient
+            # ones (5xx/429) were already retried at the node; if we still land
+            # here the provider is failing. Report cleanly — do NOT re-invoke,
+            # which would duplicate the user's message in the saved thread. Any
+            # ValueError that is NOT a provider error is a real bug: re-raise.
+            text = _provider_error_text(e)
+            if text is None:
+                raise
+            print(
+                "\nAgent_J: The model provider returned an error (" + text +
+                "). This is usually temporary — please try again in a moment.",
+                flush=True,
+            )
+            return
+        except openai.APIError as e:
+            # Auth/connection/other OpenRouter API errors. Report, don't crash.
+            text = _provider_error_text(e) or str(e)
+            print(
+                "\nAgent_J: I couldn't reach the model just now (" + text +
+                "). Please check your OPENROUTER_API_KEY / connection and try again.",
+                flush=True,
+            )
             return
         except RateLimitError as e:
             # Token/request quota hit — retrying immediately won't help, so tell
@@ -829,13 +1009,13 @@ def run_with_retry(inputs, max_attempts=4):
     salvaged = salvage_failed_tool_call(last_error)
     if salvaged is not None:
         query = inputs["messages"][-1][1]  # the user's question text
-        print("\nAgent_J:", summarize_tool_result(query, salvaged), flush=True)
+        print("\nAgent_J:\n\n" + summarize_tool_result(query, salvaged), flush=True)
     else:
-        print("Agent: The model kept mangling its tool call. Try rephrasing.", flush=True)
+        print("\nAgent_J: The model kept mangling its tool call. Try rephrasing.", flush=True)
 
 
 if __name__ == "__main__":
-    print("Ask me a question (or type 'quit' to exit).")
+    print("Hi, I'm Agent_J. Ask me a question (or type 'quit' to exit).")
 
     while True:
         user_question = input("\nYou: ").strip()
