@@ -176,7 +176,7 @@ def _fetch_jobs(query, country, date_posted, work_from_home, max_results, max_pa
 def search_jobs(
     query: str,
     country: str = "in",
-    date_posted: str = "week",
+    date_posted: str = "today",
     work_from_home: bool = False,
     max_results: int = 50,
     max_pages: int = 10,
@@ -444,7 +444,6 @@ def _gemini_generate(system_text: str, user_text: str):
 
     return None, f"Gemini failed after {GEMINI_MAX_ATTEMPTS} attempts: {last_error}"
 
-
 @tool
 def write_job_blog(
     query: str = "",
@@ -454,21 +453,9 @@ def write_job_blog(
     work_from_home: bool = False,
     max_results: int = 10,
 ) -> str:
-    """Write a professional, ready-to-publish blog post for a job-hunting
-    website, using Google Gemini to do the writing. Use this when the user asks
-    to write, create, or draft a blog, article, or post about jobs (rather than
-    just list them).
-
-    Provide EITHER:
-      - query: to feature multiple matching openings, e.g. "python developer
-        in kolkata"; or
-      - job_id: a single Job ID (from search_jobs) to write a post about one
-        specific job, using its full details.
-
-    country: two-letter ISO code matching the location.
-    date_posted: one of "all", "today", "3days", "week", "month" (query mode).
-    work_from_home: True to feature only remote / WFH jobs (query mode).
-    max_results: how many jobs to feature in the post (query mode, default 10)."""
+    """Write a professional, SEO-optimized, ready-to-publish blog post for an Indian job portal.
+    Uses Google Gemini to transform job data into a high-ranking career article.
+    """
 
     if job_id:
         jobs, error = _fetch_job_details(job_id, country)
@@ -487,102 +474,128 @@ def write_job_blog(
             return f"Could not fetch job data to write the blog: {error}"
         return f"No jobs found for '{topic}', so there is nothing to write about."
 
-    # Build a grounded, structured block per job for the writer to work from,
-    # so it composes prose only from real data (no invented salaries/links).
-    # In job_id mode the details endpoint also supplies highlights/description.
+    # Prepare grounded data for the AI
     blocks = []
     for job in jobs:
-        title = job.get("job_title", "Unknown role")
-        company = job.get("employer_name", "Unknown company")
-        loc = job.get("job_location") or ", ".join(
-            p for p in (job.get("job_city"), job.get("job_state"), job.get("job_country"))
-            if p
-        ) or "N/A"
-        if job.get("job_is_remote") is True or job.get("work_arrangement") == "remote":
-            arrangement = "Remote"
-        else:
-            arrangement = job.get("work_arrangement") or "On-site"
-        employment = job.get("job_employment_type", "")
-        posted = job.get("job_posted_at") or "recently"
-        skills = job.get("required_technologies") or []
-        link = job.get("job_apply_link", "")
+        # --- LINK SAFETY LOGIC ---
+        # Prioritize official company website over third-party aggregators
+        official_link = job.get("job_apply_link", "")
+        employer_site = job.get("employer_website", "")
+        apply_options = job.get("apply_options", [])
+        
+        # If apply_options exist, look for a link that matches the company domain
+        if apply_options and employer_site:
+            domain = employer_site.replace("https://", "").replace("http://", "").replace("www.", "").split('/')[0]
+            for option in apply_options:
+                link = option.get("apply_link", "")
+                if domain in link:
+                    official_link = link
+                    break
+
+        title = job.get("job_title", "N/A")
+        company = job.get("employer_name", "N/A")
+        loc = job.get("job_location") or f"{job.get('job_city', '')}, {job.get('job_state', '')}".strip(", ") or "India"
+        
+        lo, hi = job.get("job_min_salary"), job.get("job_max_salary")
+        currency = job.get("job_salary_currency", "INR")
+        salary = f"{currency} {lo} - {hi}" if lo and hi else "Best in Industry"
+        
+        exp = job.get("required_experience_years")
+        exp_str = f"{exp}+ years" if exp else "Not specified (Check description)"
+        
+        desc = (job.get("job_description") or "").strip()
+        highlights = job.get("job_highlights") or {}
+        quals = highlights.get("Qualifications") or []
+        resps = highlights.get("Responsibilities") or []
 
         fields = [
             f"Title: {title}",
             f"Company: {company}",
             f"Location: {loc}",
-            f"Arrangement: {arrangement}",
+            f"Salary: {salary}",
+            f"Experience: {exp_str}",
+            f"Qualifications: {'; '.join(quals[:5])}",
+            f"Responsibilities: {'; '.join(resps[:5])}",
+            f"Description: {desc[:800]}...",
+            f"OfficialApplyLink: {official_link}"
         ]
-        if employment:
-            fields.append(f"Type: {employment}")
-        fields.append(f"Posted: {posted}")
-        if skills:
-            fields.append(f"Skills: {', '.join(skills)}")
-
-        # Richer fields available in job-details (job_id mode).
-        highlights = job.get("job_highlights") or {}
-        quals = highlights.get("Qualifications") or []
-        resps = highlights.get("Responsibilities") or []
-        if quals:
-            fields.append("Qualifications: " + "; ".join(quals[:6]))
-        if resps:
-            fields.append("Responsibilities: " + "; ".join(resps[:6]))
-        desc = (job.get("job_description") or "").strip()
-        if desc:
-            trimmed = desc[:600].rstrip() + (" ..." if len(desc) > 600 else "")
-            fields.append("Description: " + trimmed)
-
-        fields.append(f"Apply: {link}")
         blocks.append("\n".join(fields))
 
     job_data = ("\n\n" + ("-" * 20) + "\n\n").join(blocks)
 
     system_text = (
-        "You are an expert SEO content writer for a job-hunting website. "
-        "Write an engaging, original, ready-to-publish blog post in Markdown "
-        "using ONLY the job data provided below. "
-        "Tone: professional yet conversational, active voice, short 2-4 "
-        "sentence paragraphs, key facts in bold, Grade 7-9 reading level. "
-        "Do NOT invent or assume anything not in the data — no made-up "
-        "salaries, skills, qualifications, benefits, company culture, dates, or "
-        "links. If a detail is missing, write around it gracefully rather than "
-        "filling the gap. Reproduce every apply link exactly as given.\n\n"
-        "If only ONE job is given, write a single-role feature article with "
-        "this exact section order:\n"
-        "1. An H1 title shaped like '<Role> at <Company>: <short benefit-led "
-        "hook>'.\n"
-        "2. A two-paragraph intro that hooks the reader, says why the role "
-        "matters, and states the location, work arrangement, and employment "
-        "type.\n"
-        "3. ## Role Overview — what the role is and who it suits.\n"
-        "4. ## Key Responsibilities — a bullet list (only responsibilities "
-        "present in the data).\n"
-        "5. ## Required Skills & Qualifications — a bullet list (only skills "
-        "and qualifications present in the data).\n"
-        "6. ## Why Join <Company>? — base this strictly on the provided "
-        "benefits/description; if none are given, keep it general and honest "
-        "instead of inventing perks, culture, or projects.\n"
-        "7. ## Call to Action — a short closing that ends with the exact apply "
-        "link.\n"
-        "Target length: 600-900 words.\n\n"
-        "If SEVERAL jobs are given, write a roundup instead: a catchy H1, a "
-        "short inviting intro, then one H3 subsection per job headed by the "
-        "role and company, each with a 1-2 sentence description, a short bullet "
-        "list of key facts (location, work arrangement, type, key skills), and "
-        "the exact apply link as a Markdown link, ending with a brief "
-        "call-to-action."
+        "Act as a Senior SEO Strategist and Job Portal Content Editor. "
+        "Your goal is to write a high-ranking blog post for an Indian job seeker audience.\n\n"
+        
+        "STRICT FORMATTING RULES:\n"
+        "1. DO NOT use '#' for headings. Use UPPERCASE plain text for main titles and Normal Case for subheadings.\n"
+        "2. DO NOT use '**' or '*' for bold/italics. Use plain text.\n"
+        "3. Use '•' for all bullet points.\n"
+        "4. Start with 'SEO title:' (max 60 chars), 'Meta description:' (150-160 chars), and 'Suggested URL Slug:'.\n\n"
+        
+        "CONTENT STRUCTURE (MANDATORY SECTIONS):\n"
+        "- MAIN TITLE: <Role Name> Recruitment 2024 at <Company Name>\n"
+        "- Intro: Hook the reader about the career opportunity.\n"
+        "- Job Overview Table: Include Columns: Company Name, Job Role, Salary, Location, Eligibility, Experience Required.\n"
+        "- Job Role & Responsibilities: Use bullet points.\n"
+        "- Eligibility Criteria: Education and skills.\n"
+        "- Selection Process: Describe a 3-4 step process (Assessment, Technical, HR).\n"
+        "- Documents to Carry: List essential items (Resume, Aadhar, Education certs, etc.).\n"
+        "- How to Apply: Step-by-step guide.\n"
+        "- Official Apply Link: Use the provided OfficialApplyLink. Mention: 'Note: Always apply through official company portals to avoid fraud.'\n"
+        "- Employer Reviews Section Logic: If a rating is available, do not just list the number. Break it down into sub-categories: Work-Life Balance, Career Growth, and Compensation. Provide a 1-sentence summary of the company 'Vibe' based on the job description (e.g., 'Tech-driven,' 'Collaborative,' or 'Fast-paced'). This builds trust with the candidate."
+        "- Frequently Asked Questions: 3-4 clear Q&A pairs.\n"
+        "- Related Jobs: Suggest 5-8 similar job roles which you get from the search_jobs tool call. Show the job titles and it's application link.\n"
+        
+        "TONE & SEO:\n"
+        "- Use keywords: 'Recruitment 2024', 'Latest Jobs in India', 'Job Vacancy'.\n"
+        "- If details are missing, use 'As per Company Norms'.\n"
     )
-    user_text = (
-        f"Blog topic: {topic}\nNumber of openings: {len(jobs)}\n\n"
-        f"Job data:\n{job_data}"
-    )
+    
+    user_text = f"Topic: {topic}\n\nJob Data:\n{job_data}"
 
     blog, gen_error = _gemini_generate(system_text, user_text)
     if blog is None:
-        return f"Failed to write the blog: {gen_error}"
+        return f"Failed to write the SEO blog: {gen_error}"
 
-    note = f"\n\n_(Note: the job list was partial due to: {error})_" if error else ""
-    return blog + note
+    return _strip_markdown(blog)
+
+
+def _strip_markdown(text: str) -> str:
+    """
+    Cleans the output for a professional display:
+    1. Removes all '#' heading markers.
+    2. Removes all '**' and '*' bold/italic markers.
+    3. Maintains Markdown links [text](url) but removes bolding around them.
+    4. Ensures list bullets are standardized to '•'.
+    """
+    lines = []
+    for line in text.splitlines():
+        # Remove markdown heading markers
+        line = re.sub(r"^\s{0,3}#{1,6}\s*", "", line)
+        
+        # Convert bullets to standard '•'
+        line = re.sub(r"^(\s*)[*-]\s+", r"\1• ", line)
+        
+        # Remove bold and italic formatting
+        line = line.replace("**", "").replace("__", "").replace("*", "_").replace("_", "")
+        
+        lines.append(line)
+        
+    return "\n".join(lines).strip()
+
+
+def _strip_markdown(text: str) -> str:
+    """Return the blog as clean plain text for console display: drop '#' heading
+    markers and '**' bold markers, and turn '*'/'-' list bullets into '•'.
+    Apply links are left as [text](url) so the URL stays with its label."""
+    lines = []
+    for line in text.splitlines():
+        line = re.sub(r"^\s{0,3}#{1,6}\s*", "", line)   # "## Title" -> "Title"
+        line = re.sub(r"^(\s*)[*-]\s+", r"\1• ", line)  # "* item" / "- item" -> "• item"
+        line = line.replace("**", "").replace("*", "")  # drop bold / stray emphasis
+        lines.append(line)
+    return "\n".join(lines)
 
 
 def _money(value, currency: str) -> str:
